@@ -1,8 +1,9 @@
 use std::{env, fs};
 use std::path::PathBuf;
-use clap::{ArgAction, Arg};
 use walkdir::WalkDir;
 use clap::{Parser, Subcommand};
+use std::cmp;
+use colored::*;
 
 fn main() {
     let file_handler = FileHandler::parse();
@@ -26,27 +27,56 @@ impl CommandTrait for Commands {
     fn execute(&self) {
         match &self {
             Commands::OutputFileContents { file_name} => {
+
                 let path_buf = get_file(file_name);
 
-                match path_buf {
-                    None => {
-                        println!("No file found matching the given name.");
-                    }
-                    Some(path_buf) => {
+                let file_contents = fs::read_to_string(path_buf).expect("Could not read the file to a string!");
 
-                        let file_contents = fs::read_to_string(path_buf)
-                            .expect("Could not read the file to a string!");
-
-                        print!("\n{}", file_contents)
-                    }
-                }
-
+                print!("\n{}", file_contents);
             }
             Commands::AppendToFile { file_name, text } => {
+                let path_buf = get_file(file_name);
 
+                let previous_text = fs::read_to_string(&path_buf).expect("Could not read the file to a string!");
+
+                let new_text = previous_text + text;
+
+                fs::write(path_buf, new_text).expect("Failed to write the contents provided to the file.");
             }
-            Commands::FindText { text } => {
+            Commands::FindText { text, context_size } => {
 
+                let file_paths = get_file_paths();
+
+                for file in file_paths {
+
+                    let contents = fs::read_to_string(&file);
+
+                    match contents {
+                        Ok(contents) => {
+
+                            let sliced_contents: Vec<&str> = contents.split("\n").collect();
+
+                            sliced_contents.iter().enumerate().filter(|&(_, line)| line.contains(text)).for_each(|(index, _)|{
+                                let context_u_size = *context_size as usize;
+
+                                let window_start = index.saturating_sub(context_u_size);
+                                let window_end = cmp::min(sliced_contents.len(), index.saturating_add(context_u_size + 1));
+
+                                let window_contents = &sliced_contents[window_start..window_end];
+
+                                let file_name = file.file_name().and_then(|name| name.to_str()).unwrap_or("Unknown file.");
+
+                                println!("\nText '{}' found in file: {}\n", text.red(), file_name.green());
+                                println!("---\n");
+
+                                for line in window_contents.iter() {
+                                    println!("{}", line);
+                                }
+                            });
+                        }
+                        Err(_) => continue
+                    }
+                }
             }
             Commands::FindAndReplace { find, replace} => {
 
@@ -55,7 +85,28 @@ impl CommandTrait for Commands {
     }
 }
 
-fn get_file(file_name: &String) -> Option<PathBuf> {
+fn get_file_paths() -> Vec<PathBuf> {
+
+    let current_directory = env::current_dir().expect("Failed to get the current working directory.");
+
+    let mut paths: Vec<PathBuf> = Vec::new();
+
+    for directory_entry in WalkDir::new(current_directory){
+
+        match directory_entry {
+            Ok(entry) => {
+                paths.push(entry.into_path())
+            }
+            Err(e) => {
+                eprintln!("An error occurred {}", e)
+            }
+        }
+    }
+
+    return paths;
+}
+
+fn get_file(file_name: &String) -> PathBuf {
 
     let current_directory = env::current_dir()
         .expect("Failed to get the current working directory.");
@@ -71,20 +122,20 @@ fn get_file(file_name: &String) -> Option<PathBuf> {
 
         let path = directory_entry.path();
 
-        if path.file_name().map_or(false, |os| os.to_str().expect("Could not parse the OsStr to a string.") == file_name){
-            return Some(path.to_path_buf());
+        if path.file_name().map(|os| os.to_str().expect("Could not parse the OsStr to a string.") == file_name).unwrap(){
+            return path.to_path_buf();
         }
 
     }
 
-    return None;
+    panic!("No file found with the name: {}", file_name)
 }
 
 #[derive(Subcommand)]
 enum Commands {
     #[clap(name = "print", about = "Outputs the contents of a file to the console.")]
     OutputFileContents {
-        #[clap(value_parser, short = 'p', long = "print")]
+        #[clap(value_parser)]
         file_name: String
     },
     #[clap(name = "append", about = "Appends the given text to a file.")]
@@ -97,7 +148,9 @@ enum Commands {
     #[clap(name = "find", about = "Searches recursively in the current directory and finds all files containing the given text.")]
     FindText {
         #[clap(value_parser)]
-        text: String
+        text: String,
+        #[clap(value_parser)]
+        context_size: u8
     },
     #[clap(name = "replace", about = "Finds the given text and replaces it with the given text.")]
     FindAndReplace {
