@@ -66,29 +66,7 @@ impl CommandTrait for Commands {
 
                                 let file_name = file.file_name().and_then(|name| name.to_str()).unwrap_or("Unknown file.");
 
-                                if no_highlight {
-                                    println!("\nText '{}' found in file: {}\n", text, file_name);
-                                    println!("---\n");
-
-                                    for line in window_contents.iter() {
-                                        println!("{}", line);
-                                    }
-
-                                    return;
-                                }
-
-                                println!("\nText '{}' found in file: {}\n", text.red(), file_name.green());
-                                println!("---\n");
-
-                                for line in window_contents.iter() {
-
-                                    if !no_highlight {
-                                        let replacement = highlight_text(line, text, Color::Red);
-                                        println!("{}", replacement);
-                                    }
-
-                                    println!("{}", line);
-                                }
+                                print_context_window(window_contents, file_name, text, *no_highlight);
                             });
                         }
                         Err(_) => continue
@@ -100,6 +78,27 @@ impl CommandTrait for Commands {
             }
         }
     }
+}
+
+fn print_context_window(window_contents: &[&str], file_name: &str, text: &str, no_highlight: bool) {
+
+    if no_highlight {
+        println!("\nText '{}' found in file: {}\n", text, file_name);
+    } else {
+        println!("\nText '{}' found in file: {}\n", text.red(), file_name.green());
+    }
+
+    println!("---");
+
+    for line in window_contents {
+        if no_highlight {
+            println!("{}", line);
+        } else {
+            println!("{}", highlight_text(line, text, Color::Red));
+        }
+    }
+
+    println!("---\n");
 }
 
 fn highlight_text(full_text: &str, text_to_highlight: &str, color: Color) -> String {
