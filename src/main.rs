@@ -43,7 +43,7 @@ impl CommandTrait for Commands {
 
                 fs::write(path_buf, new_text).expect("Failed to write the contents provided to the file.");
             }
-            Commands::FindText { text, context_size } => {
+            Commands::FindText { text, context_size, no_highlight } => {
 
                 let file_paths = get_file_paths();
 
@@ -66,10 +66,27 @@ impl CommandTrait for Commands {
 
                                 let file_name = file.file_name().and_then(|name| name.to_str()).unwrap_or("Unknown file.");
 
+                                if no_highlight {
+                                    println!("\nText '{}' found in file: {}\n", text, file_name);
+                                    println!("---\n");
+
+                                    for line in window_contents.iter() {
+                                        println!("{}", line);
+                                    }
+
+                                    return;
+                                }
+
                                 println!("\nText '{}' found in file: {}\n", text.red(), file_name.green());
                                 println!("---\n");
 
                                 for line in window_contents.iter() {
+
+                                    if !no_highlight {
+                                        let replacement = highlight_text(line, text, Color::Red);
+                                        println!("{}", replacement);
+                                    }
+
                                     println!("{}", line);
                                 }
                             });
@@ -83,6 +100,13 @@ impl CommandTrait for Commands {
             }
         }
     }
+}
+
+fn highlight_text(full_text: &str, text_to_highlight: &str, color: Color) -> String {
+
+    let replacement = text_to_highlight.color(color).to_string();
+
+    return full_text.replace(text_to_highlight, &replacement);
 }
 
 fn get_file_paths() -> Vec<PathBuf> {
@@ -149,8 +173,10 @@ enum Commands {
     FindText {
         #[clap(value_parser)]
         text: String,
-        #[clap(value_parser)]
-        context_size: u8
+        #[clap(value_parser, default_value_t = 3)]
+        context_size: u8,
+        #[clap(long = "no-highlight", action = clap::ArgAction::SetTrue)]
+        no_highlight: bool
     },
     #[clap(name = "replace", about = "Finds the given text and replaces it with the given text.")]
     FindAndReplace {
