@@ -9,3 +9,4 @@ edition = "2021"
 clap = { version = "4.4.7", features = ["derive"] }
 walkdir = "2.4.0"
 colored = "2.0.4"
+indicatif = "0.17.7"

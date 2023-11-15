@@ -4,6 +4,7 @@ use walkdir::WalkDir;
 use clap::{Parser, Subcommand};
 use std::cmp;
 use colored::*;
+use indicatif::{ProgressBar, ProgressStyle};
 
 fn main() {
     let file_handler = FileHandler::parse();
@@ -46,8 +47,13 @@ impl CommandTrait for Commands {
             Commands::FindText { text, context_size, no_highlight } => {
 
                 let file_paths = get_file_paths();
+                let progress_bar = create_progress_bar(file_paths.len() as u64);
 
-                for file in file_paths {
+                let search_results: Vec<SearchResult> = Vec::new();
+
+                for (index, file) in file_paths.iter().enumerate() {
+
+                    progress_bar.set_position(index as u64);
 
                     let contents = fs::read_to_string(&file);
 
@@ -55,29 +61,50 @@ impl CommandTrait for Commands {
                         Ok(contents) => {
 
                             let sliced_contents: Vec<&str> = contents.split("\n").collect();
+                            let mut context_windows: Vec<ContextWindow> = Vec::new();
+                            let mut occurences = 0;
 
-                            sliced_contents.iter().enumerate().filter(|&(_, line)| line.contains(text)).for_each(|(index, _)|{
-                                let context_u_size = *context_size as usize;
+                            for(line_index, line) in sliced_contents.iter().enumerate() {
+                                if line.contains(text) {
+                                    occurences += 1;
 
-                                let window_start = index.saturating_sub(context_u_size);
-                                let window_end = cmp::min(sliced_contents.len(), index.saturating_add(context_u_size + 1));
 
-                                let window_contents = &sliced_contents[window_start..window_end];
+                                }
+                            }
 
-                                let file_name = file.file_name().and_then(|name| name.to_str()).unwrap_or("Unknown file.");
-
-                                print_context_window(window_contents, file_name, text, *no_highlight);
-                            });
-                        }
+                       }
+                        // This suppresses any file authorization errors, among other errors that might occur.
                         Err(_) => continue
                     }
                 }
+
             }
             Commands::FindAndReplace { find, replace} => {
 
             }
         }
     }
+}
+
+struct SearchResult {
+    file_name: String,
+    file_path: String,
+    number_of_occurrences: usize,
+    context_window: ContextWindow
+}
+
+struct ContextWindow {
+    window_contents: Vec<String>
+}
+
+fn create_progress_bar(length: u64) -> ProgressBar {
+    let pb = ProgressBar::new(length);
+
+    pb.set_style(ProgressStyle::default_bar()
+        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos:>7}/{len:7} {msg}")
+                     .expect("Unable to set the progress bar template."));
+
+    return pb;
 }
 
 fn print_context_window(window_contents: &[&str], file_name: &str, text: &str, no_highlight: bool) {
